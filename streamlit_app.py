@@ -26,7 +26,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from geoscouter.config import CACHE_FILES, GDS_INPUT_NAME, WORK_DIR
+from geoscouter.config import CACHE_FILES, GDS_INPUT_NAME, WORK_DIR, resolve_work_dir
 from geoscouter.core.curation import build_curated_gse_table, gse_health_status
 from geoscouter.core.filters import (
     apply_series_filters,
@@ -66,6 +66,16 @@ def _issue_url(step: int | None = None) -> str:
     if step is None:
         return base
     return f"{base}&title={quote(f'[Step {step}] ')}"
+
+
+def _show_work_dir_permission_error(exc: PermissionError, *, action: str) -> None:
+    st.error(
+        f"Permission denied while {action} under `{WORK_DIR}`.\n\n"
+        f"{exc}\n\n"
+        "Use a writable cache directory, for example:\n"
+        "`export GEOSCOUTER_WORK_DIR=/path/you/can/write`\n\n"
+        f"(Default without the variable: `{resolve_work_dir()}`)"
+    )
 
 
 def _step_header(step: int, title: str, *, caption: str | None = None) -> None:
@@ -682,6 +692,8 @@ _step_header(
     ),
 )
 
+st.caption(f"Pipeline cache directory: `{WORK_DIR}` (override with `GEOSCOUTER_WORK_DIR`).")
+
 uploaded_gds = st.file_uploader("Upload gds_result.txt", type=["txt"])
 
 if st.button("Delete all cached outputs"):
@@ -714,33 +726,40 @@ if st.button("Delete all cached outputs"):
     st.rerun()
 
 if uploaded_gds is not None:
-    (WORK_DIR / GDS_INPUT_NAME).write_bytes(uploaded_gds.getvalue())
-    st.success(f"Saved upload to {WORK_DIR / GDS_INPUT_NAME}")
+    try:
+        (WORK_DIR / GDS_INPUT_NAME).write_bytes(uploaded_gds.getvalue())
+    except PermissionError as exc:
+        _show_work_dir_permission_error(exc, action="saving your upload")
+    else:
+        st.success(f"Saved upload to {WORK_DIR / GDS_INPUT_NAME}")
 
 if st.button("Run pipeline", type="primary"):
     expected = WORK_DIR / GDS_INPUT_NAME
     if not expected.exists():
         st.error("Upload gds_result.txt first.")
     else:
-        cache_path = os.path.join(dir_base, "geo_webscrap.csv")
-        if os.path.exists(cache_path):
-            st.info(f"Loading cached scrape: {cache_path}")
-            st.session_state.df_combined = pd.read_csv(cache_path)
-        else:
-            st.info("Running web scrape (requests-first; Selenium only if available locally).")
-            result = run_geo_pipeline(dir_base)
-            if result is not None:
-                st.session_state.df_combined = result
-        if st.session_state.df_combined is not None:
-            st.session_state.df_combined = ensure_platform_labels(
-                st.session_state.df_combined,
-                gds_path=WORK_DIR / GDS_INPUT_NAME,
-            )
-            st.session_state.df_active = st.session_state.df_combined.copy()
-            st.success(
-                f"Ready: {st.session_state.df_combined['Series'].nunique()} series, "
-                f"{len(st.session_state.df_combined)} rows."
-            )
+        try:
+            cache_path = os.path.join(dir_base, "geo_webscrap.csv")
+            if os.path.exists(cache_path):
+                st.info(f"Loading cached scrape: {cache_path}")
+                st.session_state.df_combined = pd.read_csv(cache_path)
+            else:
+                st.info("Running web scrape (requests-first; Selenium only if available locally).")
+                result = run_geo_pipeline(dir_base)
+                if result is not None:
+                    st.session_state.df_combined = result
+            if st.session_state.df_combined is not None:
+                st.session_state.df_combined = ensure_platform_labels(
+                    st.session_state.df_combined,
+                    gds_path=WORK_DIR / GDS_INPUT_NAME,
+                )
+                st.session_state.df_active = st.session_state.df_combined.copy()
+                st.success(
+                    f"Ready: {st.session_state.df_combined['Series'].nunique()} series, "
+                    f"{len(st.session_state.df_combined)} rows."
+                )
+        except PermissionError as exc:
+            _show_work_dir_permission_error(exc, action="running the pipeline")
 
 st.subheader("Downloads")
 found = False

@@ -68,6 +68,23 @@ streamlit run streamlit_app.py --server.port 8503 --server.address 127.0.0.1
 
 Then open **http://127.0.0.1:8503**.
 
+### Local run on HPC / shared servers
+
+Uploads and scrape caches are written under **`data/output/`** in the repo (not `/tmp`), so you keep a directory you own on scratch.
+
+If you see `Permission denied` after uploading or running the pipeline:
+
+1. Confirm you launched the current app: `streamlit run streamlit_app.py` (not legacy scripts under `legacy/app/`).
+2. Point caches to a writable path:
+
+```bash
+export GEOSCOUTER_WORK_DIR=/mnt/scratch2/$USER/geoscouter_cache
+mkdir -p "$GEOSCOUTER_WORK_DIR"
+streamlit run streamlit_app.py --server.port 8503 --server.address 127.0.0.1
+```
+
+3. If an old **`/tmp/geoscouter`** folder was created by another user or root, remove or avoid it by using `GEOSCOUTER_WORK_DIR` as above.
+
 ### Stop the app
 
 Press `Ctrl+C` in the terminal where Streamlit is running.
