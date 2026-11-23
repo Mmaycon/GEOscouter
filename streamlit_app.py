@@ -28,6 +28,7 @@ import streamlit as st
 
 from geoscouter.config import CACHE_FILES, GDS_INPUT_NAME, WORK_DIR, resolve_work_dir
 from geoscouter.core.curation import build_curated_gse_table, gse_health_status
+from geoscouter.core.dubious import flag_dubious_gses
 from geoscouter.core.filters import (
     apply_series_filters,
     filter_gses_by_metadata,
@@ -115,6 +116,7 @@ then visualize and compare supplementary files. Deployed with [Streamlit Communi
 for key, default in {
     "df_combined": None,
     "df_active": None,
+    "df_dubious": None,
     "summary_df": None,
     "gse_selection_list": [],
     "gse_df_filtered": None,
@@ -709,7 +711,7 @@ if st.button("Delete all cached outputs"):
         else:
             missing.append(fname)
     for key in [
-        "df_combined", "df_active", "summary_df", "gse_df_filtered",
+        "df_combined", "df_active", "df_dubious", "summary_df", "gse_df_filtered",
         "list_of_metadata_dfs", "metadata_search_results", "metadata_matched_gses",
         "curated_gse_df", "metadata_fetch_scope_gses",
     ]:
@@ -758,8 +760,34 @@ if st.button("Run pipeline", type="primary"):
                     f"Ready: {st.session_state.df_combined['Series'].nunique()} series, "
                     f"{len(st.session_state.df_combined)} rows."
                 )
+                dubious = flag_dubious_gses(st.session_state.df_combined)
+                st.session_state.df_dubious = dubious
+                dubious.to_csv(os.path.join(dir_base, "dubious_gses.csv"), index=False)
         except PermissionError as exc:
             _show_work_dir_permission_error(exc, action="running the pipeline")
+
+if st.session_state.df_dubious is not None:
+    flagged = st.session_state.df_dubious.loc[st.session_state.df_dubious["Dubious"]]
+    with st.expander(f"Possibly mis-declared GSEs ({len(flagged)})", expanded=False):
+        st.caption(
+            "Supplementary files match a technology signature that differs from the declared "
+            "GPL. \"generic platform\": files look technology-specific (e.g. Visium) but the GPL "
+            "is a generic sequencer/array. \"conflicting platform\": the GPL names another "
+            "technology. Detection only; nothing is dropped or relabelled."
+        )
+        if flagged.empty:
+            st.info("No platform/file-signature mismatches found.")
+        else:
+            st.dataframe(
+                flagged.assign(
+                    GEO=flagged["Series"].map(
+                        lambda g: f"https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={g}"
+                    )
+                ).drop(columns=["Dubious"]),
+                column_config={"GEO": st.column_config.LinkColumn("GEO")},
+                hide_index=True,
+                use_container_width=True,
+            )
 
 st.subheader("Downloads")
 found = False
