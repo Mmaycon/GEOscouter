@@ -8,10 +8,11 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 import streamlit as st
 from geoscouter.core.platforms import build_technology_label, ensure_platform_labels
-from geoscouter.core.tar_expand import expand_tar_rows, is_tar_filename
+from geoscouter.core.tar_expand import is_tar_filename
 from geoscouter.utils.http import ncbi_get
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+
 
 logger = logging.getLogger(__name__)
 
@@ -352,7 +353,6 @@ def process_gse(gse_id, driver=None, super_series=None, series_meta: dict | None
         if fname and not row.get("Supplementary URL") and fname in url_map:
             row["Supplementary URL"] = url_map[fname]
 
-    supp_data = expand_tar_rows(supp_data, gse_id, url_map)
     return supp_data
 
 
@@ -419,5 +419,6 @@ def run_geo_pipeline(dir_base, proximity_window=10):
 
     df_combined = pd.DataFrame(all_data)
     df_combined = ensure_platform_labels(df_combined, gds_path=gds_file_path)
+    df_combined["TAR file"] = df_combined["Supplementary file"].apply(is_tar_filename)
     df_combined.to_csv(os.path.join(dir_base, "geo_webscrap.csv"), index=False)
     return df_combined
