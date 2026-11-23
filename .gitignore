@@ -10,5 +10,5 @@ build/
 data/output/*
 !data/output/.gitkeep
 .cursor/
-.manuscript/
+manuscript/
 collaboration_plan.md
