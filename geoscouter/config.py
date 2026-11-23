@@ -39,6 +39,7 @@ WORK_DIR = ensure_work_dir()
 CACHE_FILES = [
     "geo_webscrap.csv",
     "gds_processed.csv",
+    "dubious_gses.csv",
     "filtered_geo_webscrap.csv",
     "curated_gse_catalog.csv",
     "metadata_GSE.xlsx",
